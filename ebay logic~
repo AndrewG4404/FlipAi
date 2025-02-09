@@ -70,13 +70,15 @@ def parse_ebay_listings(html):
             rating = item.find('div', {'class': 'x-star-rating'})
             rating = rating.find('span').text.strip() if rating else 'N/A'
             image = item.find('img', {'src': True})['src']
-            
+            link = item.find('a', {'class': 's-item__link'})['href']
+
             results.append({
                 'name': name,
                 'price': price,
                 'sales': sales,
                 'rating': rating,
-                'image': image
+                'image': image,
+                'link': link  # ✅ Add product link
             })
         except AttributeError:
             continue
@@ -125,7 +127,8 @@ def get_sales_data(url, cleaned_query):
                     "price": best_listing['price'],
                     "sales_rank": best_listing['sales'],
                     "rating": best_listing['rating'],
-                    "date": datetime.date.today().strftime("%Y-%m-%d")
+                    "date": datetime.date.today().strftime("%Y-%m-%d"),
+                    "link": best_listing['link']  # ✅ Add product link
                 }, best_listing['image']
             
         return {
@@ -133,7 +136,8 @@ def get_sales_data(url, cleaned_query):
             "price": "N/A",
             "sales_rank": "N/A",
             "rating": "N/A",
-            "date": datetime.date.today().strftime("%Y-%m-%d")
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "link": "N/A"
         }, "No image"
         
     except Exception as e:
@@ -142,7 +146,8 @@ def get_sales_data(url, cleaned_query):
             "price": "N/A",
             "sales_rank": "N/A",
             "rating": "N/A",
-            "date": datetime.date.today().strftime("%Y-%m-%d")
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "link": "N/A"
         }, ""
 
 def main():
@@ -172,6 +177,7 @@ def main():
             print(f"🚀 Sales: {ebay_data['sales_rank']}")
             print(f"⭐ Rating: {ebay_data['rating']}")
             print(f"📅 Date: {ebay_data['date']}")
+            print(f"🔗 Product Link: {ebay_data['link']}")  # ✅ Show product link
             print(f"\n🖼️ Product Image: {ebay_image if ebay_image else 'No image found'}")
 
 if __name__ == "__main__":
