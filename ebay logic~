@@ -6,9 +6,7 @@ from urllib.parse import quote
 
 # Common words to remove (retailers, filler words, brands)
 EXCLUDED_WORDS = {
-    "amazon", "ebay", "walmart", "bestbuy", "official", "bundle",
-    "pack", "set", "pro", "edition", "special", "optimal", "gut", 
-    "health", "supplement", "store", "sale", ".com", "new", "used"
+    "amazon", "ebay", "walmart", "bestbuy", "target", "amazon.com", "ebay.com", "walmart.com", "bestbuy.com", "target.com",
 }
 
 def clean_title(title):
