@@ -1,0 +1,182 @@
+import requests
+from bs4 import BeautifulSoup
+import datetime
+import re
+from urllib.parse import quote
+
+# Common words to remove (retailers, filler words, brands)
+EXCLUDED_WORDS = {
+    "amazon", "ebay", "walmart", "bestbuy", "target", "amazon.com", "ebay.com", "walmart.com", "bestbuy.com", "target.com",
+}
+
+def clean_title(title):
+    """Remove unnecessary words and extract key product terms dynamically."""
+    words = title.lower().split()
+    keywords = [word for word in words if word not in EXCLUDED_WORDS]
+    return " ".join(keywords).strip()
+
+def get_image_and_title(item_name):
+    """Fetch Google image and extract a clean title dynamically."""
+    api_key = "AIzaSyAWwMT-J8DFkdh6B8k_yjBxKXSfENNfjOM"
+    search_engine_id = "e440b00f82add4f0c"  
+    
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "q": item_name,
+        "cx": search_engine_id,
+        "key": api_key,
+        "searchType": "image",
+        "num": 1
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        if "items" in data:
+            raw_title = data["items"][0]["title"]
+            clean_product_title = clean_title(raw_title)
+            return clean_product_title, data["items"][0]["link"]
+        else:
+            return "❌ No item found.", ""
+
+    except requests.exceptions.RequestException as e:
+        return f"🚨 API Error: {e}", ""
+
+def get_ebay_link(search_term):
+    """Generate a flexible eBay search URL based on extracted key terms."""
+    cleaned_terms = clean_title(search_term)
+    return f"https://www.ebay.com/sch/i.html?_nkw={quote(cleaned_terms)}&_sop=12"
+
+def parse_ebay_listings(html):
+    """Extracts eBay product listings with improved selectors."""
+    soup = BeautifulSoup(html, 'html.parser')
+    results = []
+
+    listings = soup.find_all('div', {'class': 's-item__wrapper'})
+
+    for item in listings:
+        if 's-item__sep' in item.get('class', []):
+            continue
+
+        try:
+            name = item.find('span', {'role': 'heading'}).text.strip()
+            price = item.find('span', {'class': 's-item__price'}).text.strip()
+            sales = item.find('span', {'class': 's-item__hotness'})
+            sales = sales.text.strip() if sales else 'N/A'
+            rating = item.find('div', {'class': 'x-star-rating'})
+            rating = rating.find('span').text.strip() if rating else 'N/A'
+            image = item.find('img', {'src': True})['src']
+            link = item.find('a', {'class': 's-item__link'})['href']
+
+            results.append({
+                'name': name,
+                'price': price,
+                'sales': sales,
+                'rating': rating,
+                'image': image,
+                'link': link  # ✅ Add product link
+            })
+        except AttributeError:
+            continue
+
+    return results
+
+def get_relevant_listing(listings, cleaned_query):
+    """Finds the best match using a dynamic scoring system."""
+    if not listings:
+        return None
+
+    scored = []
+    query_words = set(cleaned_query.split())
+
+    for listing in listings:
+        name = listing['name'].lower()
+        name_words = set(name.split())
+
+        # Score based on matching words
+        score = len(query_words & name_words)
+
+        # Give extra points for price presence
+        if '$' in listing['price']:
+            score += 1
+
+        scored.append((score, listing))
+
+    # Sort by score in descending order
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    return scored[0][1] if scored and scored[0][0] > 0 else None
+
+def get_sales_data(url, cleaned_query):
+    scraperapi_key = "8b00c3f9b6a8f5e096dc1209fea42cbb"
+    scraper_url = f"https://api.scraperapi.com/?api_key={scraperapi_key}&url={url}"
+    
+    try:
+        response = requests.get(scraper_url, timeout=15)
+        if response.status_code == 200:
+            listings = parse_ebay_listings(response.text)
+            best_listing = get_relevant_listing(listings, cleaned_query)
+            
+            if best_listing:
+                return {
+                    "product": best_listing['name'],
+                    "price": best_listing['price'],
+                    "sales_rank": best_listing['sales'],
+                    "rating": best_listing['rating'],
+                    "date": datetime.date.today().strftime("%Y-%m-%d"),
+                    "link": best_listing['link']  # ✅ Add product link
+                }, best_listing['image']
+            
+        return {
+            "product": "No relevant listings found",
+            "price": "N/A",
+            "sales_rank": "N/A",
+            "rating": "N/A",
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "link": "N/A"
+        }, "No image"
+        
+    except Exception as e:
+        return {
+            "product": f"Error: {str(e)}",
+            "price": "N/A",
+            "sales_rank": "N/A",
+            "rating": "N/A",
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "link": "N/A"
+        }, ""
+
+def main():
+    while True:
+        item_name = input("\nInput item name (or type 'exit' to quit): ").strip()
+        if item_name.lower() == 'exit':
+            print("Exiting. Goodbye!")
+            break
+
+        # Get Google data
+        cleaned_title, google_image_url = get_image_and_title(item_name)
+        print(f"\n🔍 Product Identification:")
+        print(f"📛 Cleaned Title: {cleaned_title}")
+        print(f"🌄 Google Image: {google_image_url}")
+
+        if "❌" not in cleaned_title:
+            # Get eBay data
+            ebay_url = get_ebay_link(cleaned_title)
+            print(f"\n🛒 eBay Search:")
+            print(f"🔗 {ebay_url}")
+            
+            ebay_data, ebay_image = get_sales_data(ebay_url, cleaned_title)
+            
+            print("\n📈 Sales Data:")
+            print(f"📦 Product: {ebay_data['product']}")
+            print(f"💰 Price: {ebay_data['price']}")
+            print(f"🚀 Sales: {ebay_data['sales_rank']}")
+            print(f"⭐ Rating: {ebay_data['rating']}")
+            print(f"📅 Date: {ebay_data['date']}")
+            print(f"🔗 Product Link: {ebay_data['link']}")  # ✅ Show product link
+            print(f"\n🖼️ Product Image: {ebay_image if ebay_image else 'No image found'}")
+
+if __name__ == "__main__":
+    main()
